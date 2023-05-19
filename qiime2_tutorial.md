@@ -9,16 +9,20 @@ Microbial community analysis in the human oral cavity Kuczynski et al. (2011) - 
 
 ## Tutorial  
 ### 1. Downloading Anaconda and activating QIIME2 environment
-Downloads the QIIME2 conda environment file for Mac OS 
+Downloads the QIIME2 conda environment file for Mac OS
 wget https://data.qiime2.org/distro/core/qiime2-2023.2-py38-osx-conda.yml
+
 Creates a new conda environment called 'qiime2-2023.2' based on it
 conda env create -n qiime2-2023.2 --file qiime2-2023.2-py38-osx-conda.yml
 conda activate qiime2-2023.2
 ### 2. Retrieving sequence data
 The repository contains a BASH script named 'fetchFastq.sh' that automatically downloads the raw FASTQ files and sample metadata directly from EBI SRA. Due to the update on the website, for the script to run properly, the command needs to be change from: 
+
 curl -sLo MANIFEST.txt "http://www.ebi.ac.uk/ena/data/warehouse/search?query=%22study_accession%3D%22${ACCESSION}%22%22&result=read_run&fields=fastq_ftp,sample_alias,sample_accession&display=report"
 to: 
+
 curl -sLo MANIFEST.txt "https://www.ebi.ac.uk/ena/portal/api/filereport?accession=${ACCESSION}&result=read_run&fields=run_accession,fastq_ftp,fastq_md5,fastq_bytes"
+
 Change permission of the 'fetchFasta.sh' file to make it executable 
 chmod +x fetchFasta.sh 
 Execute the 'fetchFasta.sh' script
@@ -28,47 +32,59 @@ QIIME2 uses two main file types for input/output: QIIME artifacts (.qza) and QII
 By running the fetchFastq.sh script, a directory named data/import/ is created. This directory contains the forward and reverse FASTQ data files, a MANIFEST file, and a metadata.yml file. To import the FASTQ files into the QIIME artifact named reads.qza, the following command should be executed in the same directory where the fetchFastq.sh script is located.
 Importing the FASTQ files into a QIIME 
 qiime tools import --type 'SampleData[PairedEndSequencesWithQuality]' --input-path data/import --output-path reads
+
 ### 4. Visualize Sequence Quality 
 The quality characteristics of sequences may differ based on experimental factors like the gene being targeted and the sequencing platform being used. These quality features play a role in determining certain sequence processing parameters, such as the truncation parameters for the DADA2 denoising process. To examine these quality features at each base position, the following command will randomly select 10,000 sequences and generate box plots:
 Analyzing quality scores of 10,000 random samples using DADA2 (Figure 1)
 qiime demux summarize --p-n 10000 --i-data reads.qza --o-visualization quality_visualization
+
 View the plot 
 tools view quality_visualization.qzv
+
 ### 5. Denoising sequences with DADA2
 QIIME2 provides Illumina sequence denoising using DADA2. With the qiime dada2 denoise-paired algorithm, paired-end reads can be combined and denoised. To specify the truncation position for the forward and reverse sequences, use --p-trunc-len-f and --p-trunc-len-r, respectively. These parameters are currently set at 151 and 140. The program can perform parallel computations on four threads with the --p-n-threads 4 option. The --verbose option displays DADA2's progress in the terminal. The denoising process creates two outputs: a table file and a sequence file with a representative sample.
 The decrease in quality for the forward reads was minimal, whereas the reverse reads displayed a substantial decline in quality, so trim 10 base pairs from the reverse reads
 qiime dada2 denoise-paired --i-demultiplexed-seqs reads.qza --o-table table --o-representative-sequences representative_sequences --o-denoising-stats denoise_stats --p-trunc-len-f 150 --p-trunc-len-r 140 --p-trim-left-f 19 --p-trim-left-r 20 --p-n-threads 3
-# Create a summary of the output table file showing the sequences/sample spread 
+
+Create a summary of the output table file showing the sequences/sample spread 
 qiime feature-table summarize --i-table table.qza --o-visualization table_summary
+
 ### 6. Filtering sequence table 
 Upon examining the summary table, it was observed that SRR3203007 had a much lower sequencing depth compared to all other sequences. While the other sequences had more than 40000 sequences, SRR3203007 had only 3554. Therefore, it was decided to remove SRR3203007 from the table and exclude it from further analysis. To achieve this, the command to eliminate samples with less than 5000 sequences will be used, which will only remove SRR3203007 from the table.
 Filter out sequences with few samples
 qiime feature-table filter-samples --i-table table.qza --p-min-frequency 5000 --o-filtered-table filtered_table
+
 ### 7. Taxonomic classification
 QIIME2 employs scikit-learn, a Python library for machine learning, to classify sequences. To avoid the need for retraining the classifier between trials and reduce the overall runtime, a reference set can be used to train a naive Bayes classifier, which can be saved as a QIIME2 artifact for future use. However, since the previous classifier artifact generated using an older version of scikit-learn is no longer compatible with the current version, a new classifier (silva-119-99-515-806-nb-classifier) is used instead.
 Downloading the trained naive Bayes classifier artifact. 
 wget https://data.qiime2.org/2018.4/common/silva-119-99-515-806-nb-classifier.qza
+
 This classifier artifact is trained on the Silva July, 2014, trimmed to the V4 hyper-variable region with primers 515f/806r, and clustered at 99% sequence identity. This classifier artifact and the scikit-learn Python library are used to instruct QIIME:
 Classify against it with Naive Bayes
 qiime feature-classifier classify-sklearn --i-classifier silva-119-99-515-806-nb-classifier.qza --i-reads representative_sequences.qza --o-classification taxonomy
+
 ### 8. Visualize taxonomic classifications 
 QIIME is capable of generating interactive bar graphs of taxonomic profiles. Using the metadata file produced by the fetchFastq.sh script, the profiles can be sorted by metadata category. The example data metadata file is located at data/METADATA.txt.
 Taxa bar plots (Figure 2) 
 qiime taxa barplot --i-table filtered_table.qza --i-taxonomy taxonomy.qza --m-metadata-file data/METADATA.txt --o-visualization taxa-bar-plots
+
 #View the barplot 
 tools view taxa-barplots.qzv. 
+
 ### 9. Build Phylogeny 
 To construct phylogenetic diversity measures such as unweighted and weighted UniFrac, a phylogenetic tree is required. The procedure consists of four steps: multiple sequence alignment, masking, tree building, and tree rooting to generate the.qza artifact that will be used as input to generate phylogenetic-diversity measures. In this experiment, 16S rRNA gene fragments are used to construct a phylogeny. 
 Steps for generating a phylogenetic tree
 Aligning denoised sequences with MAFFT 
 qiime alignment mafft --i-sequences representative_sequences.qza --o-alignment aligned_representative_sequences
+
 Masking uniformative positions
 qiime alignment mask --i-alignment aligned_representative_sequences.qza --o-masked-alignment masked_aligned_representative_sequences
+
 Build the phylogeny using the FastTree method
 qiime phylogeny fasttree --i-alignment masked_aligned_representative_sequences.qza --o-tree unrooted_tree
+
 Rooting the tree at midpoint to produce rooted_tree.qza artifact 
 qiime phylogeny midpoint-root --i-tree unrooted_tree.qza --o-rooted-tree rooted_tree
-
 
 ## References 
 Bolyen, E., Rideout, J. R., Dillon, M. R., Bokulich, N. A., Abnet, C. C., Al-Ghalith, G. A., Alexander, H., Alm, E. J., Arumugam, M., Asnicar, F., Bai, Y., Bisanz, J. E., Bittinger, K., Brejnrod, A., Brislawn, C. J., Brown, C. T., Callahan, B. J., Caraballo-Rodríguez, A. M., Chase, J., … Caporaso, J. G. (2019). Reproducible, interactive, scalable and extensible microbiome data science using QIIME 2. Nature Biotechnology, 37(8), 852–857. https://doi.org/10.1038/s41587-019-0209-9
