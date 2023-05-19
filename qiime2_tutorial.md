@@ -9,7 +9,6 @@ Microbial community analysis in the human oral cavity Kuczynski et al. (2011) - 
 ### 1. Downloading Anaconda and activating QIIME2 environment
 Downloads the QIIME2 conda environment file for Mac OS
 wget https://data.qiime2.org/distro/core/qiime2-2023.2-py38-osx-conda.yml
-
 Creates a new conda environment called 'qiime2-2023.2' based on it
 conda env create -n qiime2-2023.2 --file qiime2-2023.2-py38-osx-conda.yml
 conda activate qiime2-2023.2
